@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ベスポジ</title>
+    <script src="js/three.js_r75/build/three.js"></script>
+    <script src="js/three.js_r75/examples/js/controls/TrackballControls.js"></script>
+    <script src="js/jquery-2.1.3.min.js"></script>
+    <style>
+        * {
+            padding: 0px;
+            margin: 0px
+        }
+
+        div#canvas-frame {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+    </style>
+    <script>
+        //JSONを読み込む
+        window.addEventListener("load", function() {
+            $.getJSON("json/normalSeatData.json", function(jsonSeat) {
+                $.getJSON("json/normalBackData.json", function(jsonBack) {
+                    $.getJSON("json/theaterData.json", function(jsonTheater) {
+                        $.getJSON("json/screenData.json", function(jsonScreen) {
+                            $.getJSON("json/floorData.json", function(jsonFloor) {
+                                var xhr = new XMLHttpRequest();
+                                xhr.open('GET', 'csv/viewside.csv');
+                                xhr.onload = function(e) {
+                                    var viewside = JSON.parse('[[' + e.target.response.split('\n').join('],[') + ']]');
+
+                                    var xhr2 = new XMLHttpRequest();
+                                    xhr2.open('GET', 'csv/viewup.csv');
+                                    xhr2.onload = function(f) {
+                                        var viewup = JSON.parse('[[' + f.target.response.split('\n').join('],[') + ']]');
+
+                                        var xhr3 = new XMLHttpRequest();
+                                        xhr3.open('GET', 'csv/viewup2.csv');
+                                        xhr3.onload = function(g) {
+                                            var viewup2 = JSON.parse('[[' + g.target.response.split('\n').join('],[') + ']]');
+
+                                            initFromJson(jsonSeat, jsonBack, jsonTheater, jsonScreen, jsonFloor, viewside, viewup, viewup2);
+                                            initMesh(jsonSeat, jsonBack, jsonTheater, jsonScreen, jsonFloor, viewside, viewup, viewup2);
+                                            initObject();
+                                            initCamera();
+                                            loop();
+                                        };
+                                        xhr3.send();
+                                    };
+                                    xhr2.send();
+                                };
+                                xhr.send();
+                            })
+                        })
+                    })
+                })
+            })
+        });
+
+        var renderer,
+            scene,
+            canvasFrame,
+            light;
+
+        function initFromJson(jsonSeat, jsonBack, jsonTheater, jsonScreen, jsonFloor, viewside, viewup, viewup2) {
+
+            //            function initThree() {
+            canvasFrame = document.getElementById('canvas-frame');
+            renderer = new THREE.WebGLRenderer({
+                antialias: true
+            });
+            if (!renderer) alert('Three.jsの初期化に失敗しました。');
+            renderer.setSize(canvasFrame.clientWidth, canvasFrame.clientHeight);
+            canvasFrame.appendChild(renderer.domElement);
+            renderer.setClearColor(0xb1b1b1, 1.0);
+
+            //            }
+
+        }
+
+        var camera;
+
+        function initCamera() {
+            camera = new THREE.PerspectiveCamera(45, canvasFrame.clientWidth / canvasFrame.clientHeight, 0.1, 1000);
+
+            //カメラのポジション
+            camera.position.set(5, 10, 2);
+            camera.lookAt({
+                x: 0,
+                y: 0,
+                z: -2
+            });
+
+            camera.up.set(0, 1, 0);
+            trackball = new THREE.TrackballControls(camera, canvasFrame);
+            trackball.screen.width = canvasFrame.clientWidth;
+
+            trackball.screen.height = canvasFrame.clientHeight;
+
+            trackball.screen.offsetLeft = canvasFrame.getBoundingClientRect().left;
+            trackball.screen.offsetTop = canvasFrame.getBoundingClientRect().top;
+
+            trackball.noZoom = false;
+            trackball.zoomSpeed = 1.0;
+
+            trackball.noPan = false;
+            trackball.panSpeed = 1, 0;
+            //            trackball.target = new THREE.Vector3(0, 300, 0);
+
+            trackball.staticMoving = true;
+            trackball.dynamicDampingFactor = 0.3;
+
+        }
+
+        //無限ループ関数の定義
+        var step = 0;
+
+        function loop() {
+            trackball.update();
+            step++;
+            renderer.render(scene, camera);
+            //            makePicture();
+            requestAnimationFrame(loop);
+        }
+
+        var axis;
+
+        scene = new THREE.Scene();
+
+        function initObject() {
+            axis = new THREE.AxisHelper(8);
+            scene.add(axis);
+            axis.position.set(0, 0, 0);
+        }
+
+        var mesh;
+
+        function initMesh(jsonSeat, jsonBack, jsonTheater, jsonScreen, jsonFloor, viewside, viewup, viewup2) {
+            //座面
+            var loader = new THREE.TextureLoader();
+            var mapTextureRed = loader.load('img/red.png');
+
+            var makeSeatBoxGeo = new THREE.BoxBufferGeometry(jsonSeat.width, jsonSeat.height, jsonSeat.depth);
+            var makeSeatBoxMtl = new THREE.MeshPhongMaterial({
+                map: mapTextureRed
+            });
+
+            function makeSeatBox(x, y, z) {
+                var seat = new THREE.Mesh(makeSeatBoxGeo, makeSeatBoxMtl);
+                                var seatAxis = new THREE.AxisHelper(1);
+                                seat.add(seatAxis);
+                seat.position.set(x, y, z);
+                return seat;
+            }
+
+            //背面
+
+            var makeBackBoxGeo = new THREE.BoxBufferGeometry(jsonBack.width, jsonBack.height, jsonBack.depth);
+            var makeBackBoxMtl = new THREE.MeshPhongMaterial({
+                map: mapTextureRed,
+            });
+
+            function makeBackBox() {
+                var back = new THREE.Mesh(makeBackBoxGeo, makeBackBoxMtl);
+                var normalBackAxis = new THREE.AxisHelper(1);
+                back.add(normalBackAxis);
+                back.position.set(jsonBack.x, jsonBack.y, jsonBack.z);
+                return back;
+            }
+
+
+            //劇場の箱
+
+            var wall = new THREE.TextureLoader();
+            var mapTextureWall = loader.load('img/wall.png');
+
+            var makeRoomBoxGeo = new THREE.BoxBufferGeometry(jsonTheater.width, jsonTheater.height, jsonTheater.depth, jsonTheater.frontmargin);
+            var makeRoomBoxMtl = new THREE.MeshPhongMaterial({
+                side: 1,
+                map: mapTextureWall
+            });
+
+            function makeRoomBox(x, y, z) {
+                var room = new THREE.Mesh(makeRoomBoxGeo, makeRoomBoxMtl)
+                room.position.set(x, y, z);
+
+                return room;
+            }
+
+            //床
+
+            var floor = new THREE.TextureLoader();
+            var mapTextureFloor = loader.load('img/floor.png');
+
+            var makeFloorBoxGeo = new THREE.BoxBufferGeometry(jsonFloor.width, jsonFloor.height, jsonFloor.depth);
+            var makeFloorMtl = new THREE.MeshPhongMaterial({
+                side: 0,
+                map: mapTextureFloor,
+            });
+
+            function makeFloorBox(x, y, z) {
+                var floorBox = new THREE.Mesh(makeFloorBoxGeo, makeFloorMtl);
+                floorBox.position.set(x, y, z);
+                return floorBox;
+            }
+
+
+            //スクリーンを作る
+            function makeScreenSeat(radiusTop, radiusBottom, height, radiusSegments, heightSegments, openEnded, thetaStart, thetaLength) {
+                var geometry = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, radiusSegments, heightSegments, openEnded, thetaStart, thetaLength);
+
+                var material = new THREE.MeshBasicMaterial({
+                    map: textureVideo,
+                });
+
+
+                var screen = new THREE.Mesh(geometry, material);
+                screen.scale.x = -1;
+                //             var screenAxis= new THREE.AxisHelper(5);
+                //            screen.add(screenAxis);
+
+                return screen;
+
+            }
+
+
+            function makeScreen() {
+                var screenGroup = new THREE.Group();
+                var standardLength = 0.8;
+                var radius = jsonScreen.radius;
+                var screenHeight = jsonScreen.radius / 16 * 9 * jsonScreen.standardLength;
+                var thetaStart = -standardLength / 2;
+
+
+
+                screenGroup.add(makeScreenSeat(radius, radius, screenHeight, 64, 64, true, thetaStart, standardLength));
+                screenGroup.position.set(jsonScreen.x, jsonScreen.y, jsonScreen.z);
+                return screenGroup;
+            }
+
+
+            //ダンケルク
+
+            var video = document.createElement('video');
+            video.src = 'video/dunkirk.mp4'
+            video.loop = true;
+            video.load();
+            video.play();
+
+
+            var textureVideo = new THREE.VideoTexture(video);
+            textureVideo.magFilter = THREE.LinearFilter;
+            textureVideo.minFilter = THREE.LinearFilter;
+
+            textureVideo.format = THREE.RGBFormat;
+
+
+
+            //スクリーンからのディレクショナルライト
+
+
+            function makeLight(x, y, z) {
+                var light = new THREE.DirectionalLight(0xfffcf9, 2);
+                light.position.set(x, y, z);
+                return light;
+            }
+
+            function makeLightHelper(light) {
+                var helper = new THREE.DirectionalLightHelper(light, 5);
+                return helper;
+            }
+
+
+            for (var i = 0; i < viewup.length; i += 1) {
+                for (var j = 0; j < viewup[i].length; j += 1) {
+                    if (viewup[i][j] == 1) {
+                        var standardDepth = (jsonTheater.depth - jsonTheater.frontmargin) / viewup.length;
+                        var frontLineZ = jsonTheater.depth / 2 - jsonTheater.frontmargin;
+                        var standardWidth = jsonTheater.width / viewup[i].length;
+                        var sideLineX = jsonTheater.width / 2 ;
+                        scene.add(makeSeatBox(sideLineX - standardWidth * j - standardWidth/2, 0, frontLineZ - standardDepth * i));
+                        console.log(standardWidth * j);
+                    }
+
+
+
+
+                }
+
+
+
+            }
+
+            scene.add(new THREE.AmbientLight(0x505050));
+            //            scene.add(makeSeatBox(0, 0, 0));
+            //            scene.add(makeBackBox(0, 0, 0));
+            scene.add(makeRoomBox(0, 0, 0));
+            scene.add(makeFloorBox(0, -3.5, -2));
+            scene.add(makeScreen());
+            var dirLight = makeLight(0, 230, 500);
+            scene.add(dirLight);
+
+        }
+
+    </script>
+
+
+</head>
+
+<body>
+
+    <div id="canvas-frame"></div>
+    <canvas id="canvas" style="position:absolute;top:0px;left:0px"></canvas>
+
+
+
+
+</body>
+
+</html>
